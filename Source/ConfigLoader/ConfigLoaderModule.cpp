@@ -4,6 +4,7 @@
 #include "FactoryGame.h"
 #include "FGGameMode.h"
 #include "FGPlayerController.h"
+#include "PauseMenuTweaks.h"
 #include "../SML/mod/hooking.h"
 #include "util/Logging.h"
 #include "Engine/World.h"
@@ -17,7 +18,7 @@ void FConfigLoaderModule::StartupModule() {
 		/*actor = gameMode->GetWorld()->SpawnActor<AConfigLoaderActor>(FVector::ZeroVector, FRotator::ZeroRotator);
 		actor->DoStuff();*/
 
-
+		GRegisterPauseMenuHooks();
 
 
 	});

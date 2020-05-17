@@ -3,6 +3,14 @@
 
 Binaries/
 
+# Mod dll copy scrpt
+buildShipping.bat
+commands.json
+
+#Dont want to commit mod files
+Content/
+!Content/FactoryGame
+
 # Compiled Object files
 *.slo
 *.lo
