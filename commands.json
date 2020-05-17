@@ -1,0 +1,14 @@
+{
+  "commands": {
+    "buildShipping -1940641434": {
+      "fileName": "cmd.exe",
+      "workingDirectory": ".",
+      "arguments": "/c buildShipping.bat  $(ConfigurationName)"
+
+
+
+    }
+  },
+  "-vs-binding": { "AfterBuild": [ "buildShipping -1940641434" ] }
+
+}
