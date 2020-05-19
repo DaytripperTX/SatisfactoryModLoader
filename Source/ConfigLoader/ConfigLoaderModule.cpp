@@ -4,21 +4,21 @@
 #include "FactoryGame.h"
 #include "FGGameMode.h"
 #include "FGPlayerController.h"
-#include "PauseMenuTweaks.h"
 #include "../SML/mod/hooking.h"
 #include "util/Logging.h"
 #include "Engine/World.h"
+#include "PauseMenuTweaks.h"
 
 
 
-AConfigLoaderActor* actor;
+//AConfigLoaderActor* actor;
 
 void FConfigLoaderModule::StartupModule() {
 	SUBSCRIBE_METHOD("?InitGameState@AFGGameMode@@UEAAXXZ", AFGGameMode::InitGameState, [](auto& scope, AFGGameMode* gameMode) {
 		/*actor = gameMode->GetWorld()->SpawnActor<AConfigLoaderActor>(FVector::ZeroVector, FRotator::ZeroRotator);
 		actor->DoStuff();*/
 
-		GRegisterPauseMenuHooks();
+	 /*PauseMenu::*/GRegisterPauseMenuHooks();
 
 
 	});
@@ -66,3 +66,5 @@ void FConfigLoaderModule::StartupModule() {
 }
 
 IMPLEMENT_GAME_MODULE(FConfigLoaderModule, ConfigLoader);
+
+

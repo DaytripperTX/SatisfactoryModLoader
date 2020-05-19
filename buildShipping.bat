@@ -2,7 +2,7 @@ echo off
 
 set shouldLaunchGame=false
 
-set "source=C:\Users\chad9\Desktop\SatisfactoryModLoader\Binaries\Win64"
+set "source=C:\Users\chad9\Desktop\SatisfactoryModLoader\SatisfactoryModLoader\Binaries\Win64"
 
 set "destination=C:\Program Files\Epic Games\SatisfactoryEarlyAccess\mods"
 
