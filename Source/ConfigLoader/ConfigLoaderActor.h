@@ -14,7 +14,6 @@ struct FInputActionKeyMapping;
 UCLASS()
 class CONFIGLOADER_API AConfigLoaderActor : public AActor {
 	GENERATED_BODY()
-
 public:
 	UFUNCTION(BlueprintCallable)
 		static void DoStuff();

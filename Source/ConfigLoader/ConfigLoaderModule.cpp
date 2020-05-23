@@ -18,7 +18,10 @@ void FConfigLoaderModule::StartupModule() {
 		/*actor = gameMode->GetWorld()->SpawnActor<AConfigLoaderActor>(FVector::ZeroVector, FRotator::ZeroRotator);
 		actor->DoStuff();*/
 
-	 /*PauseMenu::*/GRegisterPauseMenuHooks();
+		APauseMenuTweaks* Tweaks = gameMode->GetWorld()->SpawnActor<APauseMenuTweaks>();
+		
+		
+		Tweaks->GRegisterPauseMenuHooks();
 
 
 	});
