@@ -3,10 +3,14 @@
 #include "Logging.h"
 
 void SML::InitConsole() {
-	const SML::FSMLConfiguration& config = getSMLConfig();
-	if (config.consoleWindow) {
+	const SML::FSMLConfiguration& config = GetSmlConfig();
+	if (config.bConsoleWindow) {
 		EnableConsole();
 	}
+}
+
+void SML::NotifyFatalError(const FString& Message) {
+	FPlatformMisc::MessageBoxExt(EAppMsgType::Ok, *FString::Printf(TEXT("%s\nClick OK to exit."), *Message), TEXT("SatisfactoryModLoader"));
 }
 
 #ifdef PLATFORM_WINDOWS
@@ -24,6 +28,5 @@ void SML::EnableConsole() {
 }
 #else
 void SML::EnableConsole() {
-	//TODO: Implementation for other platforms
 }
 #endif

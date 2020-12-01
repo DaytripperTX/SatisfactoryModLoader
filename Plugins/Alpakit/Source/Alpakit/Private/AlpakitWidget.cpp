@@ -82,10 +82,17 @@ TSharedRef<SWidget> SAlpakaWidget::AsWidget()
 
 FReply SAlpakaWidget::Pakit()
 {
-	Settings->SaveConfig();
 	AlpakitButton.Get()->SetEnabled(false);
-	CookContent();
+	Alpakit([this]() {
+		AlpakitButton.Get()->SetEnabled(true);
+	});
 	return FReply::Handled();
+}
+
+void SAlpakaWidget::Alpakit(TFunction<void()> Done) {
+	UAlpakitSettings* Settings = GetMutableDefault<UAlpakitSettings>();
+	Settings->SaveConfig();
+	CookContent(Settings, Done);
 }
 
 FString GetAutomationLogDirV1() {
@@ -137,7 +144,7 @@ void ClearAutomationLogForVersionCheck() {
 	}	
 }
 
-void SAlpakaWidget::CookDone(FString result, double runtime)
+void SAlpakaWidget::CookDone(FString result, double runtime, UAlpakitSettings* Settings, TFunction<void()> Done)
 {
 	if (result.Equals("completed", ESearchCase::IgnoreCase))
 	{
@@ -161,8 +168,9 @@ void SAlpakaWidget::CookDone(FString result, double runtime)
 		// Get list of all cooked assets
 		TArray<FString> FilesToPak;
 		FFileHelper::LoadFileToStringArray(FilesToPak, *PakListPath);
-		FVersion smlVersion = SML::getModLoaderVersion();
-		FString smlVersionString = FString::Printf(TEXT("%d.%d.%d"), smlVersion.major, smlVersion.minor, smlVersion.patch);
+		FVersion smlVersion = SML::GetModLoaderVersion();
+		FString smlVersionString = FString::Printf(TEXT("^%llu.%llu.%llu"), smlVersion.Major, smlVersion.Minor, smlVersion.Patch);
+
 		int modsCopied = 0;
 		IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
 
@@ -175,7 +183,7 @@ void SAlpakaWidget::CookDone(FString result, double runtime)
 			// Choose from the cooked list only the current mod assets
 			TArray<FString> ModFilesToPak;
 			FString contentFolder = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir() / FString::Printf(TEXT("Saved/Cooked/WindowsNoEditor/%s/Content"), FApp::GetProjectName()));
-			FString modCookFolder = (contentFolder / FString::Printf(TEXT("%s"), *mod.Name)).Replace(TEXT("/"), TEXT("\\"));
+			FString modCookFolder = (contentFolder / FString::Printf(TEXT("%s/"), *mod.Name)).Replace(TEXT("/"), TEXT("\\"));
 			UE_LOG(LogTemp, Log, TEXT("%s"), *modCookFolder);
 			bool didOverwrite = false;
 			for (FString file : FilesToPak)
@@ -224,24 +232,44 @@ void SAlpakaWidget::CookDone(FString result, double runtime)
 				PlatformFile.CreateDirectory(*modPakFolder);
 			FString localModFolderPath = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir() / TEXT("Mods") / mod.Name);
 			FString pakFilePath = localModFolderPath / FString::Printf(TEXT("%s.pak"), *pakName);
-			FString dataJsonPath = localModFolderPath / TEXT("incomplete-data.json");
+			FString dataJsonPath = localModFolderPath / TEXT("data.json");
 			
 			TSharedPtr<FJsonObject> dataJson = MakeShared<FJsonObject>(FJsonObject());
 			dataJson->SetStringField(TEXT("mod_reference"), mod.Name);
 			dataJson->SetStringField(TEXT("name"), mod.DisplayName);
 			dataJson->SetStringField(TEXT("description"), mod.Description);
 			dataJson->SetStringField(TEXT("version"), mod.Version);
-			dataJson->SetStringField(TEXT("sml_version"), smlVersionString);
+			
 			TArray<TSharedPtr<FJsonValue>> authorsJson;
 			for (FString author : mod.Authors) {
 				authorsJson.Add(MakeShared<FJsonValueString>(FJsonValueString(author)));
 			}
 			dataJson->SetArrayField(TEXT("authors"), authorsJson);
+
+			TSharedPtr<FJsonObject> dependenciesJson = MakeShared<FJsonObject>(FJsonObject());
+			for (FAlpakitModDependency dep : mod.Dependencies) {
+				dependenciesJson->SetStringField(dep.Mod, dep.Constraint);
+			}
+			dependenciesJson->SetStringField(TEXT("SML"), smlVersionString);
+			dataJson->SetObjectField(TEXT("dependencies"), dependenciesJson);
+			
+			TSharedPtr<FJsonObject> optionalDependenciesJson = MakeShared<FJsonObject>(FJsonObject());
+			for (FAlpakitModDependency dep : mod.OptionalDependencies) {
+				optionalDependenciesJson->SetStringField(dep.Mod, dep.Constraint);
+			}
+			dataJson->SetObjectField(TEXT("optional_dependencies"), optionalDependenciesJson);
+			
 			TArray<TSharedPtr<FJsonValue>> objectsJson;
-			TSharedPtr<FJsonObject> objectJson = MakeShared<FJsonObject>(FJsonObject());
-			objectJson->SetStringField(TEXT("type"), TEXT("pak"));
-			objectJson->SetStringField(TEXT("path"), FString::Printf(TEXT("%s.pak"), *pakName));
-			objectsJson.Add(MakeShared<FJsonValueObject>(FJsonValueObject(objectJson)));
+			TSharedPtr<FJsonObject> pakObjectJson = MakeShared<FJsonObject>(FJsonObject());
+			pakObjectJson->SetStringField(TEXT("type"), TEXT("pak"));
+			pakObjectJson->SetStringField(TEXT("path"), FString::Printf(TEXT("%s.pak"), *pakName));
+			objectsJson.Add(MakeShared<FJsonValueObject>(FJsonValueObject(pakObjectJson)));
+			if(FPaths::FileExists(FPaths::Combine(FPaths::ProjectDir(), TEXT("Binaries"), TEXT("Win64"), FString::Printf(TEXT("UE4-%s-Win64-Shipping.dll"), *mod.Name)))) {
+				TSharedPtr<FJsonObject> dllObjectJson = MakeShared<FJsonObject>(FJsonObject());
+				dllObjectJson->SetStringField(TEXT("type"), TEXT("sml_mod"));
+				dllObjectJson->SetStringField(TEXT("path"), FString::Printf(TEXT("UE4-%s-Win64-Shipping.dll"), *mod.Name));
+				objectsJson.Add(MakeShared<FJsonValueObject>(FJsonValueObject(dllObjectJson)));
+			}
 			dataJson->SetArrayField(TEXT("objects"), objectsJson);
 
 			FString resultString;
@@ -253,7 +281,7 @@ void SAlpakaWidget::CookDone(FString result, double runtime)
 			// Run the paker and wait
 			FString FullCommandLine = FString::Printf(TEXT("/c \"\"%s\" %s\""), *UPakPath, *FString::Printf(TEXT("\"%s\" -create=\"%s\""), *pakFilePath, *ModPakListPath));
 			TSharedPtr<FMonitoredProcess> PakingProcess = MakeShareable(new FMonitoredProcess(CmdExe, FullCommandLine, true));
-			PakingProcess->OnOutput().BindLambda([this, mod](FString output) { UE_LOG(LogTemp, Log, TEXT("Paking %s: %s"), *mod.Name, *output); });
+			PakingProcess->OnOutput().BindLambda([mod](FString output) { UE_LOG(LogTemp, Log, TEXT("Paking %s: %s"), *mod.Name, *output); });
 			PakingProcess->Launch();
 
 			UE_LOG(LogTemp, Log, TEXT("Packing %s"), *mod.Name);
@@ -308,7 +336,7 @@ void SAlpakaWidget::CookDone(FString result, double runtime)
 	}
 	else
 		UE_LOG(LogTemp, Error, TEXT("Error while running Aplakit. Cooking returned: %s"), *result);
-	AlpakitButton.Get()->SetEnabled(true);
+	Done();
 }
 
 // https://answers.unrealengine.com/questions/500324/how-create-folder-when-my-game-is-running.html
@@ -334,7 +362,7 @@ static FORCEINLINE bool VerifyOrCreateDirectory(const FString& TestDir)
 	return true;
 }
 
-void SAlpakaWidget::CookContent()
+void SAlpakaWidget::CookContent(UAlpakitSettings* Settings, TFunction<void()> Done)
 {
 	// Create WwiseAudio folder if it doesn't exist
 	VerifyOrCreateDirectory(FPaths::ConvertRelativePathToFull(FPaths::ProjectContentDir()) / TEXT("WwiseAudio"));
@@ -344,5 +372,7 @@ void SAlpakaWidget::CookContent()
 	FString ProjectPath = FPaths::IsProjectFilePathSet() ? FPaths::ConvertRelativePathToFull(FPaths::GetProjectFilePath()) : FPaths::RootDir() / FApp::GetProjectName() / FApp::GetProjectName() + TEXT(".uproject");
 	FString CommandLine = FString::Printf(TEXT("BuildCookRun -nop4 -project=\"%s\" -cook -package -pak -skipstage -iterate"), *ProjectPath);
 
-	IUATHelperModule::Get().CreateUatTask(CommandLine, FText::FromString("Windows"), FText::FromString("Cooking content"), FText::FromString("Cooking"), nullptr, [this](FString result, double runtime) { CookDone(result, runtime); });
+	IUATHelperModule::Get().CreateUatTask(CommandLine, FText::FromString("Windows"), FText::FromString("Cooking content"), FText::FromString("Cooking"), nullptr, [Settings, Done](FString result, double runtime) {
+		CookDone(result, runtime, Settings, Done);
+	});
 }

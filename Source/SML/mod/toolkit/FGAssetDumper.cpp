@@ -7,11 +7,11 @@
 #include "Engine/UserDefinedEnum.h"
 #include "Engine/MemberReference.h"
 #include "IPlatformFilePak.h"
-#include <excpt.h>
 #include "ExceptionHandling.h"
 #include "Engine/ComponentDelegateBinding.h"
 #include "WidgetAnimationDelegateBinding.h"
 #include "BPCodeDumper.h"
+#include "toolkit/PropertyTypeHandler.h"
 
 #define DEFAULT_ITERATOR_FLAGS EFieldIteratorFlags::IncludeSuper, EFieldIteratorFlags::IncludeDeprecated, EFieldIteratorFlags::IncludeInterfaces
 
@@ -25,9 +25,7 @@ struct FSerializationContext {
 	uint32 CurrentObjectIndex = 1;
 };
 
-//Defined Originally In EDGraphSchema_K2.h, re-implemented below to work out of Editor.
-//Note that some information cannot be recovered because UObject metadata is missing
-bool ConvertPropertyToPinType(const UProperty* Property, /*out*/ FEdGraphPinType& TypeOut);
+bool DumpSingleFile(TSharedRef<FJsonObject> ResultJson, FString Path, FString Folder);
 
 //Performs property serialization. Defined below.
 TSharedPtr<FJsonValue> SerializePropertyValue(const UProperty* TestProperty, const void* Value, FSerializationContext& Context);
@@ -38,7 +36,7 @@ TSharedPtr<FJsonValue> SerializeStruct(UScriptStruct* StructType, const void* St
 
 TSharedRef<FJsonObject> CreatePropertyTypeDescriptor(UProperty* Property) {
 	FEdGraphPinType graphPinType;
-	ConvertPropertyToPinType(Property, graphPinType);
+	FPropertyTypeHelper::ConvertPropertyToPinType(Property, graphPinType);
 	TSharedRef<FJsonObject> typeEntry = MakeShareable(new FJsonObject());
 	typeEntry->SetStringField(TEXT("PinCategory"), graphPinType.PinCategory.ToString());
 	typeEntry->SetStringField(TEXT("PinSubCategory"), graphPinType.PinCategory.ToString());
@@ -200,10 +198,10 @@ bool isBlacklistedClass(const FString& classPath) {
 }
 
 TSharedRef<FJsonObject> dumpUserDefinedEnum(UUserDefinedEnum* definedEnum) {
-	TSharedRef<FJsonObject> resultJson = MakeShareable(new FJsonObject());
+	TSharedRef<FJsonObject> ResultJson = MakeShareable(new FJsonObject());
 	SML::Logging::info(TEXT("Dumping user defined enum "), *definedEnum->GetFullName());
 
-	resultJson->SetStringField(TEXT("StructName"), definedEnum->GetPathName());
+	ResultJson->SetStringField(TEXT("StructName"), definedEnum->GetPathName());
 	TArray<TSharedPtr<FJsonValue>> enumValues;
 	for (int64 i = 0; i <= definedEnum->GetMaxEnumValue(); i++) {
 		if (definedEnum->IsValidEnumValue(i)) {
@@ -218,16 +216,17 @@ TSharedRef<FJsonObject> dumpUserDefinedEnum(UUserDefinedEnum* definedEnum) {
 			enumValues.Add(MakeShareable(new FJsonValueObject(entryJson)));
 		}
 	}
-	resultJson->SetArrayField(TEXT("Values"), enumValues);
-	return resultJson;
+	ResultJson->SetArrayField(TEXT("Values"), enumValues);
+	DumpSingleFile(ResultJson, definedEnum->GetPathName(), "Enums");
+	return ResultJson;
 }
 
 TSharedRef<FJsonObject> dumpUserDefinedStruct(UUserDefinedStruct* definedStruct) {
-	TSharedRef<FJsonObject> resultJson = MakeShareable(new FJsonObject());
+	TSharedRef<FJsonObject> ResultJson = MakeShareable(new FJsonObject());
 	SML::Logging::info(TEXT("Dumping user defined struct "), *definedStruct->GetFullName());
 
-	resultJson->SetStringField(TEXT("StructName"), definedStruct->GetPathName());
-	resultJson->SetStringField(TEXT("Guid"), definedStruct->Guid.ToString());
+	ResultJson->SetStringField(TEXT("StructName"), definedStruct->GetPathName());
+	ResultJson->SetStringField(TEXT("Guid"), definedStruct->Guid.ToString());
 
 	FSerializationContext Context;
 	void* allocatedDefaultInstance = FMemory::Malloc(definedStruct->GetStructureSize());
@@ -241,8 +240,9 @@ TSharedRef<FJsonObject> dumpUserDefinedStruct(UUserDefinedStruct* definedStruct)
 		}
 	}
 	FMemory::Free(allocatedDefaultInstance);
-	resultJson->SetArrayField(TEXT("Fields"), fields);
-	return resultJson;
+	ResultJson->SetArrayField(TEXT("Fields"), fields);
+	DumpSingleFile(ResultJson, definedStruct->GetPathName(), "Structs");
+	return ResultJson;
 }
 
 UClass* GetOverridenFunctionSource(UFunction* Function) {
@@ -513,6 +513,8 @@ TSharedRef<FJsonObject> dumpBlueprintContent(UBlueprintGeneratedClass* Generated
 				TArray<TSharedPtr<FJsonValue>> code = SML::CreateFunctionCode(Function);
 				MethodEntry->SetArrayField(TEXT("Code"), code);
 			}
+			Methods.Add(MakeShareable(new FJsonValueObject(MethodEntry)));
+			continue;
 		}
 		TArray<TSharedPtr<FJsonValue>> code = MethodEntry->GetArrayField("Code");
 		if (code.Num() == 1 && code[0]->AsObject()->GetStringField("Instruction") == "CallUbergraph") {
@@ -552,6 +554,7 @@ TSharedRef<FJsonObject> dumpBlueprintContent(UBlueprintGeneratedClass* Generated
 	if (BlueprintDelegateBindings.Num() > 0) {
 		ResultJson->SetArrayField(TEXT("DynamicBindings"), BlueprintDelegateBindings);
 	}
+	DumpSingleFile(ResultJson, GeneratedClass->GetPathName(), "Blueprints");
 	return ResultJson;
 }
 
@@ -575,7 +578,25 @@ TSharedRef<FJsonObject> dumpClassContent(UClass* NativeClass) {
 	if (Fields.Num() > 0) {
 		ResultJson->SetArrayField(TEXT("Fields"), Fields);
 	}
+	DumpSingleFile(ResultJson, NativeClass->GetPathName(), "Class");
 	return ResultJson;
+}
+
+bool DumpSingleFile(TSharedRef<FJsonObject> ResultJson, FString Path, FString Folder)
+{
+	FString right;
+	FString left;
+	Path.Split("/", &left, &right, ESearchCase::Type::IgnoreCase, ESearchDir::Type::FromEnd);
+	if (right != "")
+	{
+		const FString& resultPath = SML::GetConfigDirectory() / "BPdump" / Folder / *left / "/" / right.Append(".json");
+		FString resultString;
+		TSharedRef<TJsonWriter<>> writer = TJsonWriterFactory<>::Create(&resultString);
+		FJsonSerializer Serializer;
+		Serializer.Serialize(ResultJson, writer);
+		return FFileHelper::SaveStringToFile(resultString, *resultPath, FFileHelper::EEncodingOptions::ForceUTF8);
+	}
+	return false;
 }
 
 FString CreateClassPathFromPackageName(const FString& PackagePath) {
@@ -657,8 +678,7 @@ void dumpSatisfactoryAssetsInternal(const FName& rootPath, const FString& fileNa
 	resultObject->SetArrayField(TEXT("Blueprints"), blueprints);
 	resultObject->SetArrayField(TEXT("Classes"), classes);
 
-
-	const FString& resultPath = SML::getConfigDirectory() / *fileName;
+	const FString& resultPath = SML::GetConfigDirectory() / *fileName;
 	FString resultString;
 	TSharedRef<TJsonWriter<>> writer = TJsonWriterFactory<>::Create(&resultString);
 	FJsonSerializer Serializer;
@@ -669,96 +689,6 @@ void dumpSatisfactoryAssetsInternal(const FName& rootPath, const FString& fileNa
 
 void SML::dumpSatisfactoryAssets(const FName& rootPath, const FString& fileName) {
 	dumpSatisfactoryAssetsInternal(rootPath, fileName);
-}
-
-//------------------------------------------------------------------
-//CODE BELOW IS STRAIGHT COPIED FROM EDGraphSchema_K2.cpp
-//BECAUSE IT IS EDITOR-ONLY MODULE WHICH DOESN'T EXIST IN SHIPPING
-//Some code was cut off because we don't have editor-only data like function object metadata
-//------------------------------------------------------------------
-
-const FName PC_Exec(TEXT("exec"));
-const FName PC_Boolean(TEXT("bool"));
-const FName PC_Byte(TEXT("byte"));
-const FName PC_Class(TEXT("class"));
-const FName PC_Int(TEXT("int"));
-const FName PC_Int64(TEXT("int64"));
-const FName PC_Float(TEXT("float"));
-const FName PC_Name(TEXT("name"));
-const FName PC_Delegate(TEXT("delegate"));
-const FName PC_MCDelegate(TEXT("mcdelegate"));
-const FName PC_Object(TEXT("object"));
-const FName PC_Interface(TEXT("interface"));
-const FName PC_String(TEXT("string"));
-const FName PC_Text(TEXT("text"));
-const FName PC_Struct(TEXT("struct"));
-const FName PC_Wildcard(TEXT("wildcard"));
-const FName PC_Enum(TEXT("enum"));
-const FName PC_SoftObject(TEXT("softobject"));
-const FName PC_SoftClass(TEXT("softclass"));
-const FName PSC_Self(TEXT("self"));
-const FName PSC_Index(TEXT("index"));
-const FName PSC_Bitmask(TEXT("bitmask"));
-const FName PN_Execute(TEXT("execute"));
-
-bool GetPropertyCategoryInfo(const UProperty* TestProperty, FName& OutCategory, FName& OutSubCategory, UObject*& OutSubCategoryObject, bool& bOutIsWeakPointer);
-
-bool ConvertPropertyToPinType(const UProperty* Property, /*out*/ FEdGraphPinType& TypeOut) {
-	if (Property == nullptr) {
-		TypeOut.PinCategory = TEXT("bad_type");
-		return false;
-	}
-
-	TypeOut.PinSubCategory = NAME_None;
-
-	// Handle whether or not this is an array property
-	const UMapProperty* MapProperty = Cast<const UMapProperty>(Property);
-	const USetProperty* SetProperty = Cast<const USetProperty>(Property);
-	const UArrayProperty* ArrayProperty = Cast<const UArrayProperty>(Property);
-	const UProperty* TestProperty = Property;
-	if (MapProperty) {
-		TestProperty = MapProperty->KeyProp;
-
-		// set up value property:
-		UObject* SubCategoryObject = nullptr;
-		bool bIsWeakPtr = false;
-		bool bResult = GetPropertyCategoryInfo(MapProperty->ValueProp, TypeOut.PinValueType.TerminalCategory, TypeOut.PinValueType.TerminalSubCategory, SubCategoryObject, bIsWeakPtr);
-		TypeOut.PinValueType.TerminalSubCategoryObject = SubCategoryObject;
-
-		if (bIsWeakPtr) {
-			return false;
-		}
-
-		if (!bResult) {
-			return false;
-		}
-	} else if (SetProperty) {
-		TestProperty = SetProperty->ElementProp;
-	} else if (ArrayProperty) {
-		TestProperty = ArrayProperty->Inner;
-	}
-	TypeOut.ContainerType = FEdGraphPinType::ToPinContainerType(ArrayProperty != nullptr, SetProperty != nullptr, MapProperty != nullptr);
-	TypeOut.bIsReference = Property->HasAllPropertyFlags(CPF_OutParm | CPF_ReferenceParm);
-	TypeOut.bIsConst = Property->HasAllPropertyFlags(CPF_ConstParm);
-
-	// Check to see if this is the wildcard property for the target container type
-	if (const UMulticastDelegateProperty* MulticastDelegateProperty = Cast<const UMulticastDelegateProperty>(TestProperty)) {
-		TypeOut.PinCategory = PC_MCDelegate;
-		FMemberReference::FillSimpleMemberReference<UFunction>(MulticastDelegateProperty->SignatureFunction, TypeOut.PinSubCategoryMemberReference);
-	} else if (const UDelegateProperty* DelegateProperty = Cast<const UDelegateProperty>(TestProperty)) {
-		TypeOut.PinCategory = PC_Delegate;
-		FMemberReference::FillSimpleMemberReference<UFunction>(DelegateProperty->SignatureFunction, TypeOut.PinSubCategoryMemberReference);
-	} else {
-		UObject* SubCategoryObject = nullptr;
-		bool bIsWeakPointer = false;
-		bool bResult = GetPropertyCategoryInfo(TestProperty, TypeOut.PinCategory, TypeOut.PinSubCategory, SubCategoryObject, bIsWeakPointer);
-		TypeOut.bIsWeakPointer = bIsWeakPointer;
-		TypeOut.PinSubCategoryObject = SubCategoryObject;
-		if (!bResult) {
-			return false;
-		}
-	}
-	return true;
 }
 
 //Note that CDO's don't call this method, they call SerializePropertyValue directly,
@@ -882,13 +812,6 @@ TSharedPtr<FJsonValue> SerializePropertyValue(const UProperty* Property, const v
 	return Result;
 }
 
-//Copies data layout of FMulticastScriptDelegate, because Epic is retarded and made this field private
-//Since TMulticastScriptDelegate doesn't have any virtual methods (so no vtable), it is (mostly) safe to assume that layout is the same
-class FMulticastScriptDelegateAccessor {
-	/** Ordered list functions to invoke when the Broadcast function is called */
-public: TArray<FScriptDelegate> InvocationList;
-};
-
 TSharedPtr<FJsonValue> SerializePropertyValueInternal(const UProperty* TestProperty, const void* Value, FSerializationContext& Context) {
 	if (TestProperty->IsA<UMulticastDelegateProperty>()) {
 		//Delegates should not be serialized directly
@@ -962,59 +885,4 @@ TSharedPtr<FJsonValue> SerializePropertyValueInternal(const UProperty* TestPrope
 		SML::Logging::fatal(TEXT("Found unsupported property type when serializing value: "), *TestProperty->GetClass()->GetName());
 		return TSharedPtr<FJsonValue>();
 	}
-}
-
-bool GetPropertyCategoryInfo(const UProperty* TestProperty, FName& OutCategory, FName& OutSubCategory, UObject*& OutSubCategoryObject, bool& bOutIsWeakPointer) {
-	if (const UInterfaceProperty* InterfaceProperty = Cast<const UInterfaceProperty>(TestProperty)) {
-		OutCategory = PC_Interface;
-		OutSubCategoryObject = InterfaceProperty->InterfaceClass;
-	} else if (const UClassProperty* ClassProperty = Cast<const UClassProperty>(TestProperty)) {
-		OutCategory = PC_Class;
-		OutSubCategoryObject = ClassProperty->MetaClass;
-	} else if (const USoftClassProperty* SoftClassProperty = Cast<const USoftClassProperty>(TestProperty)) {
-		OutCategory = PC_SoftClass;
-		OutSubCategoryObject = SoftClassProperty->MetaClass;
-	} else if (const USoftObjectProperty* SoftObjectProperty = Cast<const USoftObjectProperty>(TestProperty)) {
-		OutCategory = PC_SoftObject;
-		OutSubCategoryObject = SoftObjectProperty->PropertyClass;
-	} else if (const UObjectPropertyBase* ObjectProperty = Cast<const UObjectPropertyBase>(TestProperty)) {
-		OutCategory = PC_Object;
-		OutSubCategoryObject = ObjectProperty->PropertyClass;
-		bOutIsWeakPointer = TestProperty->IsA(UWeakObjectProperty::StaticClass());
-	} else if (const UStructProperty* StructProperty = Cast<const UStructProperty>(TestProperty)) {
-		OutCategory = PC_Struct;
-		OutSubCategoryObject = StructProperty->Struct;
-	} else if (TestProperty->IsA<UFloatProperty>()) {
-		OutCategory = PC_Float;
-	} else if (TestProperty->IsA<UInt64Property>()) {
-		OutCategory = PC_Int64;
-	} else if (TestProperty->IsA<UIntProperty>()) {
-		OutCategory = PC_Int;
-	} else if (const UByteProperty* ByteProperty = Cast<const UByteProperty>(TestProperty)) {
-		OutCategory = PC_Byte;
-		OutSubCategoryObject = ByteProperty->Enum;
-	} else if (const UEnumProperty* EnumProperty = Cast<const UEnumProperty>(TestProperty)) {
-		// K2 only supports byte enums right now - any violations should have been caught by UHT or the editor
-		if (!EnumProperty->GetUnderlyingProperty()->IsA<UByteProperty>()) {
-			OutCategory = TEXT("unsupported_enum_type");
-			return false;
-		}
-
-		OutCategory = PC_Byte;
-		OutSubCategoryObject = EnumProperty->GetEnum();
-		
-	} else if (TestProperty->IsA<UNameProperty>()) {
-		OutCategory = PC_Name;
-	} else if (TestProperty->IsA<UBoolProperty>()) {
-		OutCategory = PC_Boolean;
-	} else if (TestProperty->IsA<UStrProperty>()) {
-		OutCategory = PC_String;
-	} else if (TestProperty->IsA<UTextProperty>()) {
-		OutCategory = PC_Text;
-	} else {
-		OutCategory = TEXT("bad_type");
-		return false;
-	}
-
-	return true;
 }

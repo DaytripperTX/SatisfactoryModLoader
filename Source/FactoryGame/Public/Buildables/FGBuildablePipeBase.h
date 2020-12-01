@@ -26,7 +26,6 @@ public:
 
 	// Begin Actor Interface
 	virtual void GetLifetimeReplicatedProps( TArray< FLifetimeProperty >& OutLifetimeProps ) const override;
-	virtual void OnConstruction( const FTransform& transform ) override;
 	virtual void BeginPlay() override;
 	virtual void EndPlay( const EEndPlayReason::Type endPlayReason ) override;
 	// End Actor Interface 
@@ -78,7 +77,7 @@ public:
 	static constexpr float DEFAULT_PIPE_HEIGHT = 175.f;
 
 	const static float PIPE_COST_LENGTH_MULTIPLIER;
-protected:
+// MODDING EDIT protected:
 	/** Mesh to use for his conveyor. */
 	UPROPERTY( EditDefaultsOnly, Category = "Pipes" )
 	class UStaticMesh* mMesh;

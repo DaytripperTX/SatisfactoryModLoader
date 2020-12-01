@@ -690,20 +690,28 @@ protected:
 	//@todonow These can possibly be moved to private once Belt::OnUse has been moved to base.
 	/** Find the item closest to the given location. */
 	int32 FindItemClosestToLocation( const FVector& location ) const;
-
+public:
+	FORCEINLINE int32 FindItemClosestToLocationAccessor(const FVector& location) { return FindItemClosestToLocation(location); };
+protected:
 	/** Checks if there is an item at index. */
 	bool Factory_HasItemAt( int32 index ) const;
+public:
+	FORCEINLINE bool Factory_HasItemAtAccessor(int32 index) const { return Factory_HasItemAt(index); };
+protected:
 	/** Lets you know what type of item is on a specific index. */
 	const FConveyorBeltItem& Factory_PeekItemAt( int32 index ) const;
 	/** Remove an item from the belt at index. */
 	void Factory_RemoveItemAt( int32 index );
-
+public:
+	FORCEINLINE void Factory_RemoveItemAtAccessor(int32 index) { Factory_RemoveItemAt(index); };
 private:
 	/** Take the first element on the belt. */
 	void Factory_DequeueItem();
 	/** Put a new item onto the belt. */
 	void Factory_EnqueueItem( const FInventoryItem& item, float initialOffset );
-
+public:
+	FORCEINLINE void Factory_EnqueueItemAccessor(const FInventoryItem& item, float initialOffset) { Factory_EnqueueItem(item, initialOffset); };
+protected:
 	/**
 	 * @param out_availableSpace - amount of space until next item
 	 *
@@ -731,7 +739,7 @@ public:
 	UPROPERTY( )
 	UPresistentConveyorPackagingData* PresistentConveyorPackagingDataObject = nullptr; //held here, but created by conveyors when replicated, as we don't want to create it unless it's used.
 
-protected:
+public:
 
 	/** Speed of this conveyor. */
 	UPROPERTY( EditDefaultsOnly, Category = "Conveyor" )
