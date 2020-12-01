@@ -34,11 +34,10 @@ APauseMenuTweaks::APauseMenuTweaks()
 		SML::Logging::info(*DelName.ToString(), 1);
 	}
 
-	
 
+	SML::Logging::info("Pause menu tweaks class constructed");
 
-
-}
+};
 
 
 void APauseMenuTweaks::GRegisterPauseMenuHooks()
@@ -56,18 +55,17 @@ void APauseMenuTweaks::GRegisterPauseMenuHooks()
 
 		// Instantiate Mod Options Button
 		//UClass* FButtonClass = LoadObject<UClass>(nullptr, TEXT("/Game/FactoryGame/Interface/UI/Menu/Widget_FrontEnd_Button.Widget_FrontEnd_Button_C"));
-		UClass* FButtonClass = LoadObject<UClass>(nullptr, TEXT("/Game/ExoSuitMod/ExoSuit/UI/Mod_Button.Mod_Button_C"));
-		UModOptionsButton* ModButton = CreateWidget<UModOptionsButton>(MenuOptions, FButtonClass, FName("ModButton"));
+		//UClass* FButtonClass = LoadObject<UClass>(nullptr, TEXT("/Game/ExoSuitMod/ExoSuit/UI/Mod_Button.Mod_Button_C"));
+		//UModOptionsButton* ModButton = CreateWidget<UModOptionsButton>(MenuOptions, FButtonClass, FName("ModButton"));
 		/*SML::Logging::info("IS ModButton constructed: ", ModButton->IsConstructed());*/
 		//ModButton->SetButton(Button);
 
-
 		//test mod button class
-		//UModOptionsButton* ModButton = CreateWidget<UModOptionsButton>(MenuOptions, UModOptionsButton::StaticClass(), FName("ModButton"));
-		//UMod_Button_C__pf365157904* ModButton = CreateWidget<UMod_Button_C__pf365157904>(MenuOptions, UModOptionsButton::StaticClass(), FName("ModButton"));
+		UModOptionsButton* ModButton = CreateWidget<UModOptionsButton>(MenuOptions, UModOptionsButton::StaticClass(), FName("ModButton"));
+		//UMod_Button_C* ModButton = CreateWidget<UMod_Button_C>(MenuOptions, UModOptionsButton::StaticClass(), FName("ModButton"));
 
 
-		
+
 
 		// Retrieve mFocusWidget
 		UObjectProperty* Prop_mFocus = Cast<UObjectProperty>(PauseMenuWidget->GetClass()->FindPropertyByName(TEXT("mFocusWidget")));
@@ -86,9 +84,32 @@ void APauseMenuTweaks::GRegisterPauseMenuHooks()
 
 
 		// Insert Mod Options Button into array of pause buttons
-		MenuOptions->AddChild(ModButton);
+
+		if (!MenuOptions->HasChild(ModButton)) 
+		{
+			MenuOptions->AddChild(ModButton);
+		}
+
+		ModButton->SetPauseMenu(PauseMenuWidget, Pause_mFocusWidget, mSwitcher);
+
 
 		ModButton->ShowButton();
+
+		//TArray<UWidget*> SwitcherChildren = mSwitcher->GetAllChildren();
+
+		//for (UWidget* Child : SwitcherChildren)
+		//{
+		//	FString name = UKismetSystemLibrary::GetDisplayName(Child);
+		//	FString childClass = UKismetSystemLibrary::GetDisplayName(Child->GetClass());
+		//	FString vis = Child->IsVisible() ? TEXT("true") : TEXT("false");
+
+		//	SML::Logging::info("Switcher child Name: ", TCHAR_TO_ANSI(*name), "  |  Class Name: ", TCHAR_TO_ANSI(*childClass), "  |  Visibility: ", TCHAR_TO_ANSI(*vis));
+		//}
+
+
+
+
+
 
 		//APlayerController* PlayerController = PauseMenuWidget->GetOwningPlayer();
 
@@ -124,13 +145,13 @@ void APauseMenuTweaks::GRegisterPauseMenuHooks()
 
 
 
-			//}
+
 		TArray<UWidget*> PauseButtons = MenuOptions->GetAllChildren();
 		////PauseButtons = MenuOptions->GetAllChildren();
 
 		for (UWidget* child : PauseButtons)
 		{
-			SML::Logging::info("Child Name: ", TCHAR_TO_ANSI(*UKismetSystemLibrary::GetDisplayName(child)), "  |  Class Name: ", TCHAR_TO_ANSI(*UKismetSystemLibrary::GetDisplayName(child->GetClass())));
+			SML::Logging::info("Menu Child Name: ", TCHAR_TO_ANSI(*UKismetSystemLibrary::GetDisplayName(child)), "  |  Class Name: ", TCHAR_TO_ANSI(*UKismetSystemLibrary::GetDisplayName(child->GetClass())));
 		}
 
 	}, EPredefinedHookOffset::Return);
@@ -142,7 +163,7 @@ void APauseMenuTweaks::GRegisterPauseMenuHooks()
 	TimerDel.BindUFunction(this, FName("DoTimer"));
 	SML::Logging::info("Setting timer for 60 sec then will call button event");
 	GetWorldTimerManager().SetTimer(Timer, TimerDel, 20.0f, false);*/
-}
+};
 
 
 void APauseMenuTweaks::BeginPlay()
@@ -152,7 +173,7 @@ void APauseMenuTweaks::BeginPlay()
 	//UClass* FButtonClass = LoadObject<UClass>(nullptr, TEXT("/Game/ExoSuitMod/ExoSuit/UI/Mod_Options_btn.Mod_Options_btn_C"));
 	//ModButton = CreateWidget<UFGButtonWidget>(PlayerController, FButtonClass, FName("ModButton"));
 	//ModButton->SetButton(Button);
-}
+};
 
 
 void APauseMenuTweaks::InsertChildAt(UPanelWidget* PanelWidget, int32 Index, UWidget* Content)
@@ -161,7 +182,7 @@ void APauseMenuTweaks::InsertChildAt(UPanelWidget* PanelWidget, int32 Index, UWi
 	ShiftChild(PanelWidget, Index, Content);
 
 
-}
+};
 
 void APauseMenuTweaks::ShiftChild(UPanelWidget* PanelWidget, int32 Index, UWidget* Child)
 {
@@ -172,7 +193,7 @@ void APauseMenuTweaks::ShiftChild(UPanelWidget* PanelWidget, int32 Index, UWidge
 	Slots.Insert(Child->Slot, FMath::Clamp(Index, 0, Slots.Num()));
 	Slots[Index]->SynchronizeProperties();
 
-}
+};
 
 TArray<UPanelSlot*> APauseMenuTweaks::GetSlots(UPanelWidget* PanelWidget)
 {
@@ -184,7 +205,7 @@ TArray<UPanelSlot*> APauseMenuTweaks::GetSlots(UPanelWidget* PanelWidget)
 	}
 
 	return Slots;
-}
+};
 
 bool APauseMenuTweaks::ReplaceChildAt(UPanelWidget* PanelWidget, int32 Index, UWidget* Content) const
 {
@@ -207,7 +228,7 @@ bool APauseMenuTweaks::ReplaceChildAt(UPanelWidget* PanelWidget, int32 Index, UW
 
 	return true;
 
-}
+};
 
 void APauseMenuTweaks::OnModButtonClicked()
 {
@@ -218,6 +239,6 @@ void APauseMenuTweaks::DoTimer()
 {
 	Button->OnClicked.Broadcast();
 
-}
+};
 
 

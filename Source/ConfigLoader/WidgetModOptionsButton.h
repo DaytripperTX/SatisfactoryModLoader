@@ -1,13 +1,14 @@
 #pragma once
 //#include "FGButtonWidget.h"
 #include "UObject/Class.h"
-
 #include "Button.h"
+#include "FGWidgetSwitcher.h"
+#include "Image.h"
 #include "TextBlock.h"
 #include "WidgetSwitcher.h"
-
-
 #include "WidgetModOptionsButton.generated.h"
+
+
 
 UCLASS()
 class CONFIGLOADER_API UModOptionsButton : public UUserWidget
@@ -25,8 +26,8 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 		UTextBlock* Title;
 
-	//UPROPERTY()
-	//	Fima
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+		UImage* PointerImage;
 
 		UPROPERTY(EditAnywhere, BlueprintReadWrite)
 		FText mDisplayName;
@@ -35,7 +36,7 @@ public:
 		UWidgetSwitcher* mSwitcherWidget;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-		UWidget* mTargetWidget;
+		UWidget* mTargetWidget;  //This is the widget that will get displayed when the button is clicked
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 		UPanelWidget* mParentList;
@@ -56,8 +57,22 @@ public:
 		int FontSize;
 
 
-	///Member Functions:
+	// Properties related to the Pause Menu:
+	UPROPERTY()
+		UUserWidget* PauseMenuWidget;
+	
+	UPROPERTY()
+		UWidget* mFocusWidget;
 
+	UPROPERTY()
+		UFGWidgetSwitcher* mSwitcher; // This is a reference to the pause menu's switcher
+	
+
+
+	///Member Functions:
+	UFUNCTION()
+		void SetPauseMenu(UUserWidget* PauseMenu, UWidget* FocusWidget, UFGWidgetSwitcher* Switcher);
+	
 	UFUNCTION(BlueprintCallable)
 		void OnModButtonClicked();
 
@@ -79,8 +94,6 @@ public:
 	UFUNCTION(BlueprintCallable)
 		void SetFocused();
 
-	UFUNCTION(BlueprintCallable)
-		void OnFocusRecieved();
 
 	UFUNCTION(BlueprintCallable)
 		void ShowButton();
@@ -92,8 +105,14 @@ public:
 		FText GetButtonText();
 
 	UFUNCTION(BlueprintCallable)
-		bool SetSelected();
+		bool SetSelected(bool b);
 
+	//UFUNCTION(BlueprintImplementableEvent, BlueprintCosmetic, Category = "Input")
+		//FEventReply OnFocusReceived(FGeometry MyGeometry, FFocusEvent InFocusEvent) override;
+
+	virtual FReply NativeOnFocusReceived(const FGeometry& InGeometry, const FFocusEvent& InFocusEvent) override;
+
+	
 
 protected:
 	virtual void NativePreConstruct() override;
@@ -102,8 +121,11 @@ protected:
 
 	virtual void NativeDestruct() override;
 
-	 void InitializeWidgetComponents();
+	void InitializeWidgetComponents();
 
+	//virtual TSharedRef<SWidget> RebuildWidget() override;
+
+	void LogWidgetTree(UPanelWidget* Widget, int R);
 
 
 public:
