@@ -52,7 +52,7 @@ struct FACTORYGAME_API FFGOnlineSessionSettings
 
 	/** Hosts nat type */
 	UPROPERTY(BlueprintReadOnly)
-	ECachedNATType		NATType;
+	ECachedNATType	NATType;
 
 public:
 	FORCEINLINE ~FFGOnlineSessionSettings() = default;
